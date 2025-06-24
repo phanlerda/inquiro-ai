@@ -4,6 +4,7 @@ from .db.session import SessionLocal
 from .db.init_db import init_db
 from .api.v1.endpoints import documents
 from .core.ingestion import ensure_qdrant_collection_exists
+from .api.v1.endpoints import documents, chat
 
 # Khởi tạo DB
 init_db(db=SessionLocal())
@@ -22,6 +23,7 @@ llm = get_llm()
 
 # Bao gồm các router
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["Documents"])
+app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 
 @app.get("/", tags=["Root"])
 async def read_root():

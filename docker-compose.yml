@@ -28,6 +28,13 @@ services:
       - "6334:6334" # Port cho gRPC
     volumes:
       - qdrant_data:/qdrant/storage
+      
+  adminer:
+    image: adminer
+    container_name: rag_adminer
+    restart: always
+    ports:
+      - "8080:8080" # Ánh xạ port 8080 của host ra port 8080 của container
 
 volumes:
   postgres_data:
