@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     # Cấu hình cho Embedding Model
     EMBEDDING_MODEL_NAME: str
+
+    # Cấu hình cho Reranker Model
+    RERANKER_MODEL_NAME: str
     
 # Khởi tạo một đối tượng settings để sử dụng trong toàn bộ ứng dụng
 settings = Settings()

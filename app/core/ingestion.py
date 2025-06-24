@@ -1,6 +1,8 @@
 # backend/app/core/ingestion.py
 
 import fitz  # PyMuPDF
+# backend/app/core/ingestion.py
+import uuid
 from sqlalchemy.orm import Session
 from qdrant_client import QdrantClient, models as qdrant_models
 from sentence_transformers import SentenceTransformer
@@ -115,7 +117,7 @@ def process_document_and_embed(document_id: int):
             collection_name=settings.QDRANT_COLLECTION_NAME,
             points=[
                 qdrant_models.PointStruct(
-                    id=f"{document_id}-{i}", # ID duy nhất cho mỗi chunk
+                    id=str(uuid.uuid4()), # ID duy nhất cho mỗi chunk
                     vector=embedding.tolist(),
                     payload={
                         "document_id": document_id,
