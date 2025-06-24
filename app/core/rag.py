@@ -2,6 +2,7 @@ from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from ..config import settings
 from .llm import get_llm
+from typing import List, Tuple
 
 # --- KHỞI TẠO CÁC THÀNH PHẦN MỘT LẦN ---
 # Tái sử dụng các client và model đã được khởi tạo trong các module khác nếu có thể,
@@ -17,6 +18,49 @@ except Exception as e:
     reranker_model = None # <-- Thêm
     qdrant_client = None
     llm = None
+
+def condense_query_with_history(query: str, history: List[Tuple[str, str]]) -> str:
+    """
+    Kết hợp câu hỏi mới với lịch sử chat để tạo ra một câu hỏi độc lập.
+    """
+    if not history:
+        return query
+
+    # Ghép lịch sử thành một chuỗi duy nhất
+    history_str = ""
+    for user_msg, bot_msg in history:
+        history_str += f"Người dùng: {user_msg}\nTrợ lý: {bot_msg}\n"
+
+    # Tạo prompt cho việc condensing
+    prompt = f"""
+Dựa vào lịch sử trò chuyện dưới đây và câu hỏi mới của người dùng, hãy tạo ra một câu hỏi tìm kiếm độc lập, đầy đủ ngữ cảnh.
+Câu hỏi mới này sẽ được dùng để truy vấn một cơ sở dữ liệu tài liệu.
+Hãy đảm bảo câu hỏi mới bao gồm tất cả các chi tiết liên quan từ lịch sử.
+
+Lịch sử trò chuyện:
+{history_str}
+
+Câu hỏi mới: {query}
+
+Câu hỏi độc lập, đầy đủ ngữ cảnh:
+"""
+    
+    print("--- Condensing Query ---")
+    print(f"Prompt: {prompt}")
+
+    if not llm:
+        print("Lỗi: LLM chưa được khởi tạo, trả về câu hỏi gốc.")
+        return query
+
+    # Gọi LLM để tạo câu hỏi mới
+    # Dùng generate_content thay vì stream vì chúng ta cần toàn bộ câu trả lời
+    response = llm.generate_content(prompt)
+    condensed_query = response.text.strip()
+    
+    print(f"Câu hỏi đã được rút gọn: {condensed_query}")
+    print("------------------------")
+    
+    return condensed_query
 
 def build_prompt(query: str, context: list[str]) -> str:
     """
@@ -117,20 +161,24 @@ def search_and_rerank(query: str, document_id: int | None = None, top_k: int = 5
     
     return final_context
 
-async def get_rag_response_stream(query: str, document_id: int | None = None):
+async def get_rag_response_stream(query: str, history: List[Tuple[str, str]], document_id: int | None = None):
     """
-    Thực hiện pipeline RAG hoàn chỉnh và stream câu trả lời.
+    Thực hiện pipeline RAG hoàn chỉnh, có xử lý lịch sử chat.
     """
     if not llm:
         yield "Lỗi: LLM chưa được khởi tạo."
         return
 
-    # 1. Retrieval: Tìm kiếm context
-    print(f"Đang tìm kiếm context cho câu hỏi: '{query}'")
-    context = search_qdrant(query, document_id)
-    print(f"Đã tìm thấy {len(context)} chunks liên quan.")
+    # --- BƯỚC 0: QUERY CONDENSING ---
+    standalone_query = condense_query_with_history(query, history)
+
+    # 1. Retrieval & Reranking: Tìm kiếm context dựa trên câu hỏi độc lập
+    print(f"Đang tìm kiếm và rerank context cho câu hỏi: '{standalone_query}'")
+    context = search_and_rerank(standalone_query, document_id)
+    print(f"Đã tìm thấy và xếp hạng lại {len(context)} chunks liên quan nhất.")
     
     # 2. Augmentation: Xây dựng prompt
+    # Vẫn sử dụng câu hỏi gốc của người dùng để LLM trả lời đúng vào trọng tâm
     prompt = build_prompt(query, context)
     
     # 3. Generation: Gọi LLM và stream kết quả

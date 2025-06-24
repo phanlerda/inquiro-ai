@@ -16,7 +16,8 @@ async def chat_with_document(request: ChatRequest):
     
     # Gọi hàm xử lý RAG và stream kết quả
     response_stream = get_rag_response_stream(
-        query=request.query, 
+        query=request.query,
+        history=request.history,
         document_id=request.document_id
     )
     
