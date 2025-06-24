@@ -1,147 +1,147 @@
 # backend/app/core/ingestion.py
 
-import fitz  # PyMuPDF
-# backend/app/core/ingestion.py
 import uuid
+import numpy as np
 from sqlalchemy.orm import Session
-from qdrant_client import QdrantClient, models as qdrant_models
+from qdrant_client import QdrantClient, models
 from sentence_transformers import SentenceTransformer
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from unstructured.partition.pdf import partition_pdf
 
-# Import các thành phần cần thiết từ ứng dụng của bạn
-from .. import crud
-from .. import models as db_models
+from .. import crud, models as db_models
 from ..config import settings
 from ..db.session import SessionLocal
 
 # --- KHỞI TẠO CÁC THÀNH PHẦN MỘT LẦN ---
-# Điều này giúp tái sử dụng model và client, tiết kiệm bộ nhớ và thời gian khởi tạo.
-# Việc này được thực hiện khi module được import lần đầu tiên (khi server khởi động).
 try:
-    print("Đang tải Embedding Model...")
-    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
-    print("Tải Embedding Model thành công.")
+    print("Đang tải Dense Embedding Model (Semantic Search)...")
+    dense_embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
+    print("Tải Dense Embedding Model thành công.")
+    
+    print("Đang tải Sparse Embedding Model (Keyword Search)...")
+    sparse_embedding_model = SentenceTransformer(settings.SPARSE_VECTOR_MODEL_NAME)
+    print("Tải Sparse Embedding Model thành công.")
     
     print("Đang kết nối tới Qdrant...")
     qdrant_client = QdrantClient(url=settings.QDRANT_URL)
     print("Kết nối Qdrant thành công.")
 
 except Exception as e:
-    print(f"LỖI NGHIÊM TRỌNG khi khởi tạo các thành phần Ingestion: {e}")
-    embedding_model = None
+    print(f"Lỗi nghiêm trọng khi khởi tạo các thành phần Ingestion: {e}")
+    dense_embedding_model = None
+    sparse_embedding_model = None
     qdrant_client = None
 
 def ensure_qdrant_collection_exists():
     """
-    Đảm bảo collection trong Qdrant tồn tại. Nếu chưa có, tạo mới.
-    Hàm này được gọi một lần khi server FastAPI khởi động.
+    Đảm bảo collection trong Qdrant tồn tại và có schema đúng cho Hybrid Search.
+    Sử dụng recreate_collection để đảm bảo schema luôn được cập nhật.
     """
-    if not qdrant_client or not embedding_model:
-        print("Bỏ qua việc kiểm tra collection do Qdrant client hoặc embedding model chưa được khởi tạo.")
+    if not qdrant_client:
         return
         
     try:
-        qdrant_client.get_collection(collection_name=settings.QDRANT_COLLECTION_NAME)
-        print(f"Collection '{settings.QDRANT_COLLECTION_NAME}' đã tồn tại.")
-    except Exception:
-        print(f"Collection '{settings.QDRANT_COLLECTION_NAME}' không tồn tại. Đang tạo mới...")
-        
-        # Lấy kích thước vector từ model
-        embedding_size = embedding_model.get_sentence_embedding_dimension()
-        if not isinstance(embedding_size, int):
-             raise ValueError("Không thể xác định kích thước embedding từ model.")
-
-        qdrant_client.create_collection(
+        print(f"Đang kiểm tra và tái tạo collection '{settings.QDRANT_COLLECTION_NAME}'...")
+        qdrant_client.recreate_collection(
             collection_name=settings.QDRANT_COLLECTION_NAME,
-            vectors_config=qdrant_models.VectorParams(
-                size=embedding_size,
-                distance=qdrant_models.Distance.COSINE
-            )
+            vectors_config={
+                "dense": models.VectorParams(
+                    size=dense_embedding_model.get_sentence_embedding_dimension(),
+                    distance=models.Distance.COSINE
+                )
+            },
+            sparse_vectors_config={
+                "text": models.SparseVectorParams(
+                    index=models.SparseIndexParams(on_disk=False)
+                )
+            }
         )
-        print(f"Tạo collection '{settings.QDRANT_COLLECTION_NAME}' với kích thước vector {embedding_size} thành công.")
-
+        print("Tạo/Tái tạo collection với sparse vectors thành công.")
+    except Exception as e:
+        print(f"Lỗi khi tạo/tái tạo collection Qdrant: {e}")
+        raise e
 
 def process_document_and_embed(document_id: int):
     """
-    Tác vụ nền chính được gọi bởi FastAPI BackgroundTasks.
-    Hàm này sẽ tự quản lý DB session của riêng nó.
-    
-    Quy trình:
-    1. Lấy thông tin document từ DB.
-    2. Đọc file PDF.
-    3. Chia thành các chunks.
-    4. Tạo embeddings cho các chunks.
-    5. Lưu embeddings vào Qdrant.
-    6. Cập nhật trạng thái document trong DB.
+    Tác vụ nền chính: đọc, chunk, tạo dense & sparse vectors và lưu vào Qdrant.
     """
-    print(f"BACKGROUND TASK: Bắt đầu xử lý document ID: {document_id}")
-    
-    # Tạo một DB session mới chỉ dành cho tác vụ nền này
-    db: Session = SessionLocal()
-    
+    db = SessionLocal()
     try:
-        # Kiểm tra lại các thành phần cốt lõi
-        if not embedding_model or not qdrant_client:
-            raise RuntimeError("Lỗi: Embedding model hoặc Qdrant client chưa được khởi tạo.")
+        print(f"BACKGROUND TASK: Bắt đầu xử lý document ID: {document_id}")
+        
+        if not all([dense_embedding_model, sparse_embedding_model, qdrant_client]):
+            raise ValueError("Lỗi: Một trong các thành phần (dense, sparse, qdrant) chưa được khởi tạo.")
 
-        # 1. Lấy thông tin document từ DB
         db_document = crud.crud_document.get_document(db, document_id=document_id)
         if not db_document:
-            raise FileNotFoundError(f"Không tìm thấy document với ID {document_id} trong database.")
-
-        # Cập nhật trạng thái là PROCESSING
+            print(f"Lỗi: Không tìm thấy document với ID {document_id}")
+            return
+            
         crud.crud_document.update_document_status(db, document_id=document_id, status=db_models.DocumentStatus.PROCESSING)
 
-        # 2. Đọc file PDF
-        print(f"Đang đọc file: {db_document.filepath}")
-        doc = fitz.open(db_document.filepath)
-        full_text = "".join(page.get_text("text") for page in doc)
-        doc.close()
+        print(f"Đang phân tích và trích xuất nội dung từ {db_document.filepath} bằng unstructured...")
+        elements = partition_pdf(filename=db_document.filepath, infer_table_structure=True)
+        full_text = "\n\n".join([str(el) for el in elements])
 
-        # 3. Chia thành các chunks (logic đơn giản, có thể cải tiến sau)
-        # Ví dụ: chia theo đoạn văn bản được ngăn cách bởi hai lần xuống dòng
-        chunks = [chunk.strip() for chunk in full_text.split('\n\n') if chunk.strip()]
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=100, length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        chunks = text_splitter.split_text(full_text)
+
         if not chunks:
             print(f"Cảnh báo: Tài liệu {db_document.filename} không có nội dung hoặc không thể chia chunks.")
-            crud.crud_document.update_document_status(db, document_id=document_id, status=db_models.DocumentStatus.FAILED)
+            crud.crud_document.update_document_status(db, document_id=document_id, status=db_models.DocumentStatus.FAILED, reason="No content to process")
             return
             
         print(f"Tài liệu được chia thành {len(chunks)} chunks.")
 
-        # 4. Tạo embeddings
-        print(f"Đang tạo embeddings cho {len(chunks)} chunks...")
-        embeddings = embedding_model.encode(chunks, show_progress_bar=True, batch_size=32)
+        print("Đang tạo dense vectors (embeddings)...")
+        dense_embeddings = dense_embedding_model.encode(chunks, show_progress_bar=True)
         
-        # 5. Lưu vào Qdrant
-        print("Đang lưu các vectors vào Qdrant...")
-        qdrant_client.upsert(
-            collection_name=settings.QDRANT_COLLECTION_NAME,
-            points=[
-                qdrant_models.PointStruct(
-                    id=str(uuid.uuid4()), # ID duy nhất cho mỗi chunk
-                    vector=embedding.tolist(),
+        print("Đang tạo sparse vectors...")
+        sparse_embeddings_raw = sparse_embedding_model.encode(chunks, show_progress_bar=True)
+
+        print("Đang chuẩn bị và lưu các vectors vào Qdrant...")
+        points_to_upsert = []
+        for i, (dense_embedding, sparse_embedding_raw) in enumerate(zip(dense_embeddings, sparse_embeddings_raw)):
+            # Tìm các chỉ số của các phần tử khác không trong sparse vector
+            indices = np.where(sparse_embedding_raw > 0)[0].tolist()
+            # Lấy các giá trị tương ứng với các chỉ số đó
+            values = sparse_embedding_raw[indices].tolist()
+
+            points_to_upsert.append(
+                models.PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector={
+                        "dense": dense_embedding.tolist(),
+                        "text": models.SparseVector(
+                            indices=indices,
+                            values=values
+                        )
+                    },
                     payload={
                         "document_id": document_id,
                         "filename": db_document.filename,
-                        "text": chunk
+                        "text": chunks[i]
                     }
                 )
-                for i, (embedding, chunk) in enumerate(zip(embeddings, chunks))
-            ],
-            wait=True # Đợi cho đến khi quá trình upsert hoàn tất
-        )
+            )
+
+        if points_to_upsert:
+            qdrant_client.upsert(
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                points=points_to_upsert,
+                wait=True
+            )
+            print(f"Lưu thành công {len(points_to_upsert)} vector vào Qdrant.")
         
-        print(f"Lưu thành công {len(chunks)} vector vào Qdrant.")
-        
-        # 6. Cập nhật trạng thái COMPLETED
         crud.crud_document.update_document_status(db, document_id=document_id, status=db_models.DocumentStatus.COMPLETED)
         print(f"BACKGROUND TASK: Hoàn tất xử lý document ID: {document_id}")
 
     except Exception as e:
         print(f"LỖI trong tác vụ nền khi xử lý document ID {document_id}: {e}")
-        # Cập nhật trạng thái FAILED trong DB
-        crud.crud_document.update_document_status(db, document_id=document_id, status=db_models.DocumentStatus.FAILED)
-
+        crud.crud_document.update_document_status(db, document_id=document_id, status=db_models.DocumentStatus.FAILED, reason=str(e))
     finally:
-        # Đảm bảo DB session luôn được đóng sau khi tác vụ hoàn thành hoặc gặp lỗi
-        print(f"BACKGROUND TASK: Đóng DB session cho document ID: {document_id}")
         db.close()
+        print(f"BACKGROUND TASK: Đóng DB session cho document ID: {document_id}")

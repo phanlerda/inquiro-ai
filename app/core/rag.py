@@ -1,21 +1,27 @@
-from qdrant_client import QdrantClient
+# backend/app/core/rag.py
+
+from typing import List, Tuple
+import numpy as np
+from qdrant_client import QdrantClient, models
 from sentence_transformers import SentenceTransformer, CrossEncoder
+
 from ..config import settings
 from .llm import get_llm
-from typing import List, Tuple
 
 # --- KHỞI TẠO CÁC THÀNH PHẦN MỘT LẦN ---
-# Tái sử dụng các client và model đã được khởi tạo trong các module khác nếu có thể,
-# hoặc khởi tạo lại ở đây để module này độc lập.
 try:
-    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
+    print("Đang tải các model cho RAG...")
+    dense_embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
+    sparse_embedding_model = SentenceTransformer(settings.SPARSE_VECTOR_MODEL_NAME)
     reranker_model = CrossEncoder(settings.RERANKER_MODEL_NAME)
     qdrant_client = QdrantClient(url=settings.QDRANT_URL)
     llm = get_llm()
+    print("Tải model RAG thành công.")
 except Exception as e:
-    print(f"Lỗi khi khởi tạo các thành phần RAG: {e}")
-    embedding_model = None
-    reranker_model = None # <-- Thêm
+    print(f"Lỗi nghiêm trọng khi khởi tạo các thành phần RAG: {e}")
+    dense_embedding_model = None
+    sparse_embedding_model = None
+    reranker_model = None
     qdrant_client = None
     llm = None
 
@@ -26,34 +32,22 @@ def condense_query_with_history(query: str, history: List[Tuple[str, str]]) -> s
     if not history:
         return query
 
-    # Ghép lịch sử thành một chuỗi duy nhất
-    history_str = ""
-    for user_msg, bot_msg in history:
-        history_str += f"Người dùng: {user_msg}\nTrợ lý: {bot_msg}\n"
-
-    # Tạo prompt cho việc condensing
-    prompt = f"""
-Dựa vào lịch sử trò chuyện dưới đây và câu hỏi mới của người dùng, hãy tạo ra một câu hỏi tìm kiếm độc lập, đầy đủ ngữ cảnh.
-Câu hỏi mới này sẽ được dùng để truy vấn một cơ sở dữ liệu tài liệu.
-Hãy đảm bảo câu hỏi mới bao gồm tất cả các chi tiết liên quan từ lịch sử.
+    history_str = "\n".join([f"Người dùng: {user_msg}\nTrợ lý: {bot_msg}" for user_msg, bot_msg in history])
+    
+    prompt = f"""Dựa vào lịch sử trò chuyện dưới đây và câu hỏi mới của người dùng, hãy tạo ra một câu hỏi tìm kiếm độc lập, đầy đủ ngữ cảnh. Câu hỏi này sẽ được dùng để truy vấn cơ sở dữ liệu. Hãy đảm bảo nó bao gồm tất cả các chi tiết liên quan từ lịch sử.
 
 Lịch sử trò chuyện:
 {history_str}
 
 Câu hỏi mới: {query}
 
-Câu hỏi độc lập, đầy đủ ngữ cảnh:
-"""
+Câu hỏi độc lập:"""
     
     print("--- Condensing Query ---")
-    print(f"Prompt: {prompt}")
-
     if not llm:
         print("Lỗi: LLM chưa được khởi tạo, trả về câu hỏi gốc.")
         return query
 
-    # Gọi LLM để tạo câu hỏi mới
-    # Dùng generate_content thay vì stream vì chúng ta cần toàn bộ câu trả lời
     response = llm.generate_content(prompt)
     condensed_query = response.text.strip()
     
@@ -67,10 +61,7 @@ def build_prompt(query: str, context: list[str]) -> str:
     Xây dựng prompt hoàn chỉnh cho LLM dựa trên template.
     """
     context_str = "\n---\n".join(context)
-    
-    prompt_template = f"""
-Bạn là một trợ lý AI hữu ích. Hãy trả lời câu hỏi của người dùng dựa trên ngữ cảnh được cung cấp dưới đây.
-Nếu câu trả lời không có trong ngữ cảnh, hãy nói "Tôi không tìm thấy thông tin trong tài liệu."
+    prompt_template = f"""Bạn là một trợ lý AI hữu ích. Hãy trả lời câu hỏi của người dùng một cách chi tiết dựa trên ngữ cảnh được cung cấp dưới đây. Nếu câu trả lời không có trong ngữ cảnh, hãy nói "Tôi không tìm thấy thông tin trong tài liệu."
 
 Ngữ cảnh:
 {context_str}
@@ -82,106 +73,95 @@ Câu trả lời:
 """
     return prompt_template
 
-def search_qdrant(query: str, document_id: int | None = None, top_k: int = 5) -> list[str]:
-    """
-    Tìm kiếm các chunks liên quan trong Qdrant.
-    """
-    if not qdrant_client or not embedding_model:
-        return ["Lỗi: Qdrant hoặc Embedding model chưa được khởi tạo."]
-
-    query_vector = embedding_model.encode(query).tolist()
-
-    # Xây dựng bộ lọc (filter) nếu có document_id
-    search_filter = None
-    if document_id:
-        search_filter = {
-            "must": [
-                {
-                    "key": "document_id",
-                    "match": {
-                        "value": document_id
-                    }
-                }
-            ]
-        }
-
-    search_result = qdrant_client.search(
-        collection_name=settings.QDRANT_COLLECTION_NAME,
-        query_vector=query_vector,
-        query_filter=search_filter,
-        limit=top_k
-    )
-
-    # Trích xuất nội dung text từ kết quả
-    context = [point.payload['text'] for point in search_result]
-    return context
-
 def search_and_rerank(query: str, document_id: int | None = None, top_k: int = 5) -> list[str]:
     """
-    Kết hợp tìm kiếm và xếp hạng lại.
-    1. Tìm kiếm một lượng lớn hơn các chunks (ví dụ: 20).
-    2. Dùng reranker để xếp hạng lại và chọn ra top K tốt nhất.
+    Thực hiện Hybrid Search (dense + sparse) và sau đó rerank kết quả.
     """
-    if not qdrant_client or not embedding_model or not reranker_model:
-        return ["Lỗi: Một trong các thành phần RAG chưa được khởi tạo."]
-    
-    # 1. Tìm kiếm một lượng lớn hơn, ví dụ gấp 4 lần top_k
-    initial_search_limit = top_k * 4
-    query_vector = embedding_model.encode(query).tolist()
-    
-    search_filter = None
-    if document_id:
-        search_filter = { "must": [{"key": "document_id", "match": {"value": document_id}}] }
-
-    search_result = qdrant_client.search(
-        collection_name=settings.QDRANT_COLLECTION_NAME,
-        query_vector=query_vector,
-        query_filter=search_filter,
-        limit=initial_search_limit
-    )
-    
-    retrieved_chunks = [point.payload['text'] for point in search_result]
-
-    if not retrieved_chunks:
+    if not all([qdrant_client, dense_embedding_model, sparse_embedding_model, reranker_model]):
+        print("Lỗi: Một trong các thành phần RAG (qdrant, models, reranker) chưa được khởi tạo.")
         return []
 
-    # 2. Rerank các kết quả đã truy xuất
-    print(f"Đã truy xuất {len(retrieved_chunks)} chunks. Bắt đầu rerank...")
-    # Tạo các cặp [query, chunk] để reranker chấm điểm
+    # 1. Tạo cả dense và sparse vector cho câu hỏi
+    dense_query_vector = dense_embedding_model.encode(query).tolist()
+    
+    sparse_embedding_raw = sparse_embedding_model.encode(query)
+    indices = np.where(sparse_embedding_raw > 0)[0].tolist()
+    values = sparse_embedding_raw[indices].tolist()
+    sparse_query_vector = models.SparseVector(indices=indices, values=values)
+
+    # 2. Xây dựng các truy vấn con cho tìm kiếm batch
+    initial_search_limit = top_k * 5 
+
+    dense_request = models.SearchRequest(
+        vector=models.NamedVector(name="dense", vector=dense_query_vector),
+        limit=initial_search_limit,
+        with_payload=True
+    )
+    
+    sparse_request = models.SearchRequest(
+        vector=models.NamedSparseVector(name="text", vector=sparse_query_vector),
+        limit=initial_search_limit,
+        with_payload=True
+    )
+
+    # Thêm bộ lọc nếu có document_id
+    search_filter = None
+    if document_id:
+        search_filter = models.Filter(
+            must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
+        )
+        dense_request.filter = search_filter
+        sparse_request.filter = search_filter
+
+    # 3. Thực hiện Hybrid Search (Fusion)
+    search_results = qdrant_client.search_batch(
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+        requests=[dense_request, sparse_request]
+    )
+    
+    # 4. Hợp nhất và loại bỏ trùng lặp kết quả
+    retrieved_points = {}
+    for result_set in search_results:
+        for point in result_set:
+            retrieved_points[point.id] = point
+
+    if not retrieved_points:
+        return []
+
+    # 5. Rerank các kết quả đã được kết hợp
+    retrieved_chunks = [point.payload['text'] for point in retrieved_points.values()]
+    print(f"Đã truy xuất {len(retrieved_chunks)} chunks từ Hybrid Search. Bắt đầu rerank...")
     rerank_pairs = [[query, chunk] for chunk in retrieved_chunks]
-    # Chấm điểm
     scores = reranker_model.predict(rerank_pairs)
     
-    # Kết hợp chunks và điểm số, sau đó sắp xếp
     scored_chunks = list(zip(scores, retrieved_chunks))
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     
-    # 3. Chọn ra top K chunks có điểm cao nhất
+    # 6. Trả về top K chunks tốt nhất
     final_context = [chunk for score, chunk in scored_chunks[:top_k]]
-    
     return final_context
 
 async def get_rag_response_stream(query: str, history: List[Tuple[str, str]], document_id: int | None = None):
     """
-    Thực hiện pipeline RAG hoàn chỉnh, có xử lý lịch sử chat.
+    Thực hiện pipeline RAG hoàn chỉnh: Condense -> Hybrid Search -> Rerank -> Generate.
     """
     if not llm:
         yield "Lỗi: LLM chưa được khởi tạo."
         return
 
-    # --- BƯỚC 0: QUERY CONDENSING ---
     standalone_query = condense_query_with_history(query, history)
-
-    # 1. Retrieval & Reranking: Tìm kiếm context dựa trên câu hỏi độc lập
-    print(f"Đang tìm kiếm và rerank context cho câu hỏi: '{standalone_query}'")
+    
     context = search_and_rerank(standalone_query, document_id)
+    
+    if not context:
+        yield "Xin lỗi, tôi không tìm thấy thông tin nào liên quan trong tài liệu để trả lời câu hỏi của bạn."
+        return
+
     print(f"Đã tìm thấy và xếp hạng lại {len(context)} chunks liên quan nhất.")
     
-    # 2. Augmentation: Xây dựng prompt
-    # Vẫn sử dụng câu hỏi gốc của người dùng để LLM trả lời đúng vào trọng tâm
+    # Vẫn dùng câu hỏi gốc của người dùng trong prompt cuối cùng để LLM trả lời đúng trọng tâm
     prompt = build_prompt(query, context)
     
-    # 3. Generation: Gọi LLM và stream kết quả
     print("Đang gửi prompt đến LLM và stream câu trả lời...")
     stream = llm.generate_content(prompt, stream=True)
     
