@@ -11,5 +11,8 @@ class Settings(BaseSettings):
     # Cấu hình cho Google Gemini API
     GOOGLE_API_KEY: str
 
+    # Cấu hình cho Database
+    DATABASE_URL: str
+
 # Khởi tạo một đối tượng settings để sử dụng trong toàn bộ ứng dụng
 settings = Settings()

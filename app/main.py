@@ -1,5 +1,11 @@
 from fastapi import FastAPI
 from .core.llm import get_llm
+from .db.session import SessionLocal
+from .db.init_db import init_db
+from .api.v1.endpoints import documents
+
+# Khởi tạo DB
+init_db(db=SessionLocal())
 
 # Khởi tạo ứng dụng FastAPI
 app = FastAPI(
@@ -10,6 +16,9 @@ app = FastAPI(
 
 # Khởi tạo LLM một lần khi ứng dụng khởi động để tái sử dụng
 llm = get_llm()
+
+# Bao gồm các router
+app.include_router(documents.router, prefix="/api/v1/documents", tags=["Documents"])
 
 @app.get("/", tags=["Root"])
 async def read_root():
