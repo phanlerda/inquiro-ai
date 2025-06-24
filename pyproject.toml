@@ -16,6 +16,9 @@ sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
 psycopg2-binary = "^2.9.10"
 alembic = "^1.16.2"
 python-multipart = "^0.0.20"
+qdrant-client = "^1.14.3"
+sentence-transformers = "^4.1.0"
+pymupdf = "^1.26.1"
 
 
 [build-system]

@@ -3,9 +3,12 @@ from .core.llm import get_llm
 from .db.session import SessionLocal
 from .db.init_db import init_db
 from .api.v1.endpoints import documents
+from .core.ingestion import ensure_qdrant_collection_exists
 
 # Khởi tạo DB
 init_db(db=SessionLocal())
+# Khởi tạo Qdrant collection
+ensure_qdrant_collection_exists()
 
 # Khởi tạo ứng dụng FastAPI
 app = FastAPI(

@@ -14,5 +14,12 @@ class Settings(BaseSettings):
     # Cấu hình cho Database
     DATABASE_URL: str
 
+    # Cấu hình cho Vector DB
+    QDRANT_URL: str
+    QDRANT_COLLECTION_NAME: str
+
+    # Cấu hình cho Embedding Model
+    EMBEDDING_MODEL_NAME: str
+    
 # Khởi tạo một đối tượng settings để sử dụng trong toàn bộ ứng dụng
 settings = Settings()
