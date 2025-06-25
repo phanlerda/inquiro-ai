@@ -27,5 +27,7 @@ class Settings(BaseSettings):
     # Cấu hình cho Sparse Vector Model (Hybrid Search)
     SPARSE_VECTOR_MODEL_NAME: str
 
+    TAVILY_API_KEY: str
+
 # Khởi tạo một đối tượng settings để sử dụng trong toàn bộ ứng dụng
 settings = Settings()

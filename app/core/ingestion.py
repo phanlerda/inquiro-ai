@@ -34,15 +34,25 @@ except Exception as e:
 
 def ensure_qdrant_collection_exists():
     """
-    Đảm bảo collection trong Qdrant tồn tại và có schema đúng cho Hybrid Search.
-    Sử dụng recreate_collection để đảm bảo schema luôn được cập nhật.
+    Đảm bảo collection trong Qdrant tồn tại.
+    Nếu chưa có, tạo mới. Nếu đã có, không làm gì cả.
     """
     if not qdrant_client:
-        return
-        
+        raise ConnectionError("Qdrant client chưa được khởi tạo.")
+    
     try:
-        print(f"Đang kiểm tra và tái tạo collection '{settings.QDRANT_COLLECTION_NAME}'...")
-        qdrant_client.recreate_collection(
+        # Thử lấy thông tin của collection. Nếu thành công, nghĩa là nó đã tồn tại.
+        qdrant_client.get_collection(collection_name=settings.QDRANT_COLLECTION_NAME)
+        print(f"Collection '{settings.QDRANT_COLLECTION_NAME}' đã tồn tại. Bỏ qua việc tạo mới.")
+    except Exception as e:
+        # Nếu có lỗi (thường là lỗi 404 Not Found), nghĩa là collection chưa tồn tại.
+        print(f"Collection '{settings.QDRANT_COLLECTION_NAME}' không tồn tại. Đang tạo mới...")
+        
+        if not dense_embedding_model:
+            raise ValueError("Dense embedding model chưa được khởi tạo.")
+            
+        # Chỉ tạo collection khi nó chưa có
+        qdrant_client.create_collection(
             collection_name=settings.QDRANT_COLLECTION_NAME,
             vectors_config={
                 "dense": models.VectorParams(
@@ -56,11 +66,8 @@ def ensure_qdrant_collection_exists():
                 )
             }
         )
-        print("Tạo/Tái tạo collection với sparse vectors thành công.")
-    except Exception as e:
-        print(f"Lỗi khi tạo/tái tạo collection Qdrant: {e}")
-        raise e
-
+        print("Tạo collection mới thành công.")
+        
 def process_document_and_embed(document_id: int):
     """
     Tác vụ nền chính: đọc, chunk, tạo dense & sparse vectors và lưu vào Qdrant.
