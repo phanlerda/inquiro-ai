@@ -12,13 +12,14 @@ from .llm import get_llm
 from ..schemas.chat import Source
 
 # --- KHỞI TẠO CÁC THÀNH PHẦN MỘT LẦN ---
+# (Phần này giữ nguyên)
 try:
     print("Đang tải các model cho RAG...")
     dense_embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
     sparse_embedding_model = SentenceTransformer(settings.SPARSE_VECTOR_MODEL_NAME)
     reranker_model = CrossEncoder(settings.RERANKER_MODEL_NAME)
     qdrant_client = QdrantClient(url=settings.QDRANT_URL)
-    llm = get_llm() # get_llm() bây giờ trả về một object của LangChain
+    llm = get_llm()
     tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
     print("Tải model RAG và các client thành công.")
 except Exception as e:
@@ -34,15 +35,16 @@ except Exception as e:
 # ĐỊNH NGHĨA CÁC CÔNG CỤ (TOOLS)
 # ==============================================================================
 
-def document_search_tool(query: str, document_id: int | None = None) -> Dict:
+def document_search_tool(query: str, document_id: int | None = None, user_id: int | None = None) -> Dict:
     """
-    Công cụ tìm kiếm thông tin trong các tài liệu đã được upload.
+    Công cụ tìm kiếm thông tin trong tài liệu, có thêm bộ lọc user_id.
     """
-    print(f"--- Đang sử dụng Document Search Tool cho câu hỏi: '{query}' ---")
-    context_data = _search_and_rerank_documents(query, document_id, top_k=5)
+    print(f"--- Đang sử dụng Document Search Tool cho câu hỏi: '{query}' của user_id: {user_id} ---")
+    
+    context_data = _search_and_rerank_documents(query, document_id, user_id, top_k=5)
     
     if not context_data:
-        return {"context": "Không tìm thấy thông tin liên quan trong tài liệu.", "sources": []}
+        return {"context": "Không tìm thấy thông tin liên quan trong các tài liệu của bạn.", "sources": []}
         
     context_text = "\n---\n".join([doc['text'] for doc in context_data])
     sources = [Source(**doc) for doc in context_data]
@@ -73,37 +75,60 @@ def web_search_tool(query: str) -> Dict:
 # CÁC HÀM HỖ TRỢ
 # ==============================================================================
 
-def _search_and_rerank_documents(query: str, document_id: int | None = None, top_k: int = 5) -> List[Dict]:
-    # (Hàm này không thay đổi vì không gọi LLM)
-    # ... giữ nguyên nội dung hàm ...
+def _search_and_rerank_documents(
+    query: str, document_id: int | None = None, user_id: int | None = None, top_k: int = 5
+) -> List[Dict]:
+    """
+    Hàm nội bộ để thực hiện Hybrid Search và Rerank, có thêm bộ lọc user_id.
+    """
     if not all([qdrant_client, dense_embedding_model, sparse_embedding_model, reranker_model]):
         print("Lỗi: Một trong các thành phần RAG chưa được khởi tạo.")
         return []
+
     dense_query_vector = dense_embedding_model.encode(query).tolist()
     sparse_embedding_raw = sparse_embedding_model.encode(query)
     indices = np.where(sparse_embedding_raw > 0)[0].tolist()
     values = sparse_embedding_raw[indices].tolist()
     sparse_query_vector = models.SparseVector(indices=indices, values=values)
+
     initial_search_limit = top_k * 5
     dense_request = models.SearchRequest(vector=models.NamedVector(name="dense", vector=dense_query_vector), limit=initial_search_limit, with_payload=True)
     sparse_request = models.SearchRequest(vector=models.NamedSparseVector(name="text", vector=sparse_query_vector), limit=initial_search_limit, with_payload=True)
+
+    # --- CẬP NHẬT LOGIC LỌC ---
+    # Xây dựng bộ lọc, kết hợp cả document_id và user_id nếu có
+    filter_must_conditions = []
     if document_id:
-        search_filter = models.Filter(must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))])
+        filter_must_conditions.append(
+            models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))
+        )
+    if user_id:
+        filter_must_conditions.append(
+            models.FieldCondition(key="owner_id", match=models.MatchValue(value=user_id))
+        )
+
+    if filter_must_conditions:
+        search_filter = models.Filter(must=filter_must_conditions)
         dense_request.filter = search_filter
         sparse_request.filter = search_filter
+
     search_results = qdrant_client.search_batch(collection_name=settings.QDRANT_COLLECTION_NAME, requests=[dense_request, sparse_request])
+    
     retrieved_points: Dict[str, ScoredPoint] = {}
     for result_set in search_results:
         for point in result_set:
             retrieved_points[point.id] = point
+
     if not retrieved_points:
         return []
-    retrieved_chunks = [point.payload['text'] for point in retrieved_points.values()]
-    rerank_pairs = [[query, chunk] for chunk in retrieved_chunks]
+
+    rerank_pairs = [[query, point.payload['text']] for point in retrieved_points.values()]
     scores = reranker_model.predict(rerank_pairs)
+    
     points_list = list(retrieved_points.values())
     scored_points = list(zip(scores, points_list))
     scored_points.sort(key=lambda x: x[0], reverse=True)
+    
     final_context_data = []
     for score, point in scored_points[:top_k]:
         final_context_data.append({
@@ -114,6 +139,7 @@ def _search_and_rerank_documents(query: str, document_id: int | None = None, top
     return final_context_data
 
 def condense_query_with_history(query: str, history: List[Tuple[str, str]]) -> str:
+    # (Hàm này không thay đổi)
     if not history:
         return query
     history_str = "\n".join([f"Người dùng: {user_msg}\nTrợ lý: {bot_msg}" for user_msg, bot_msg in history])
@@ -125,21 +151,16 @@ Lịch sử trò chuyện:
 Câu hỏi mới: {query}
 
 Câu hỏi độc lập:"""
-    
     print("--- Condensing Query ---")
-    if not llm:
-        print("Lỗi: LLM chưa được khởi tạo, trả về câu hỏi gốc.")
-        return query
-
-    # THAY ĐỔI Ở ĐÂY: Dùng .invoke() và .content
+    if not llm: return query
     response = llm.invoke(prompt)
     condensed_query = response.content.strip()
-    
     print(f"Câu hỏi đã được rút gọn: {condensed_query}")
     print("------------------------")
     return condensed_query
 
 def build_final_prompt_with_citation(query: str, context: str) -> str:
+    # (Hàm này không thay đổi)
     prompt_template = f"""Bạn là một trợ lý AI xuất sắc. Hãy trả lời câu hỏi của người dùng dựa trên các nguồn thông tin được cung cấp dưới đây. Khi trả lời, bạn BẮT BUỘC phải trích dẫn các nguồn bạn đã sử dụng bằng cách thêm `[Nguồn x]` vào cuối mỗi câu hoặc mệnh đề có thông tin từ nguồn đó. Ví dụ: "Helios-V là một dự án nghiên cứu về năng lượng mặt trời [Nguồn 1]." Nếu thông tin không có trong các nguồn được cung cấp, hãy trả lời "Tôi không tìm thấy thông tin trong tài liệu."
 
 Các nguồn (Mỗi nguồn được đánh số, ví dụ [Nguồn 1], [Nguồn 2],...):
@@ -156,7 +177,12 @@ Câu trả lời (nhớ trích dẫn nguồn):
 # LOGIC AGENT CHÍNH
 # ==============================================================================
 
-async def get_agentic_rag_response(query: str, history: List[Tuple[str, str]], document_id: int | None = None) -> Dict:
+async def get_agentic_rag_response(
+    query: str, history: List[Tuple[str, str]], document_id: int | None = None, user_id: int | None = None
+) -> Dict:
+    """
+    Thực hiện pipeline Agentic RAG, có thêm tham số user_id.
+    """
     if not llm:
         return {"answer": "Lỗi: LLM chưa được khởi tạo.", "sources": []}
 
@@ -172,18 +198,18 @@ Câu hỏi của người dùng: "{standalone_query}"
 Hãy trả lời bằng MỘT TỪ DUY NHẤT: `document_search` hoặc `web_search`."""
 
     print("--- Agent đang lựa chọn công cụ ---")
-    # THAY ĐỔI Ở ĐÂY: Dùng .ainvoke() và .content
     tool_choice_response = await llm.ainvoke(tool_selection_prompt)
     chosen_tool = tool_choice_response.content.strip().lower()
     print(f"Agent đã chọn: {chosen_tool}")
 
     if "document_search" in chosen_tool:
-        tool_result = document_search_tool(standalone_query, document_id)
+        # Truyền user_id vào tool
+        tool_result = document_search_tool(standalone_query, document_id, user_id)
     elif "web_search" in chosen_tool:
         tool_result = web_search_tool(standalone_query)
     else:
         print("Lựa chọn không rõ ràng, mặc định dùng document_search.")
-        tool_result = document_search_tool(standalone_query, document_id)
+        tool_result = document_search_tool(standalone_query, document_id, user_id)
 
     context = tool_result["context"]
     sources = tool_result["sources"]
@@ -195,7 +221,6 @@ Hãy trả lời bằng MỘT TỪ DUY NHẤT: `document_search` hoặc `web_sea
     final_prompt = build_final_prompt_with_citation(query, context_for_prompt)
     
     print("Đang gửi prompt cuối cùng đến LLM...")
-    # THAY ĐỔI Ở ĐÂY: Dùng .ainvoke() và .content
     final_response = await llm.ainvoke(final_prompt)
 
     return {"answer": final_response.content, "sources": sources}

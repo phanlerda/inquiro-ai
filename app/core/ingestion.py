@@ -130,7 +130,8 @@ def process_document_and_embed(document_id: int):
                     payload={
                         "document_id": document_id,
                         "filename": db_document.filename,
-                        "text": chunks[i]
+                        "text": chunks[i],
+                        "owner_id": db_document.owner_id
                     }
                 )
             )

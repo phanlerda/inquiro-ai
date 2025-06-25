@@ -27,6 +27,9 @@ pandas = ">=2.0.0"
 langchain-google-genai = "^2.1.5"
 langchain-core = "^0.3.66"
 langchain-community = "^0.3.26"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-jose = "^3.5.0"
+pydantic = {extras = ["email"], version = "^2.11.7"}
 
 
 [build-system]

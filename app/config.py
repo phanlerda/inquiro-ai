@@ -29,5 +29,10 @@ class Settings(BaseSettings):
 
     TAVILY_API_KEY: str
 
+    # Thêm các biến JWT
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+
 # Khởi tạo một đối tượng settings để sử dụng trong toàn bộ ứng dụng
 settings = Settings()
