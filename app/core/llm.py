@@ -1,32 +1,26 @@
-import google.generativeai as genai
+# backend/app/core/llm.py
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+import os
 from ..config import settings
+
+# LangChain đọc API key từ biến môi trường
+os.environ["GOOGLE_API_KEY"] = settings.GOOGLE_API_KEY
 
 def get_llm():
     """
-    Khởi tạo và trả về client cho mô hình Gemini.
+    Khởi tạo và trả về một instance LLM của LangChain cho model Gemini.
     """
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-    
-    # Cấu hình cho model
-    generation_config = {
-        "temperature": 0.7,
-        "top_p": 1,
-        "top_k": 1,
-        "max_output_tokens": 2048,
-    }
-
-    safety_settings = [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    ]
-    
-    # Sử dụng gemini-1.5-flash-latest hoặc gemini-1.5-flash-001
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-latest",
-        generation_config=generation_config,
-        safety_settings=safety_settings
-    )
-    
-    return model
+    try:
+        model = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash-latest",
+            temperature=0.5,
+            top_p=1,
+            top_k=1,
+            # LangChain tự động quản lý safety settings, nhưng có thể cấu hình nếu cần
+            convert_system_message_to_human=True # Giúp tương thích tốt hơn với các prompt
+        )
+        return model
+    except Exception as e:
+        print(f"Lỗi khi khởi tạo LangChain ChatGoogleGenerativeAI: {e}")
+        return None
