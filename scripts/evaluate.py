@@ -1,7 +1,8 @@
-# backend/evaluate.py
+# backend/scripts/evaluate.py
 
+# Import các thư viện cần thiết cho async, xử lý đối số dòng lệnh, typing, và dữ liệu
 import asyncio
-import argparse # <-- Thư viện để nhận tham số từ dòng lệnh
+import argparse
 from typing import List, Dict
 from datasets import Dataset
 import pandas as pd
@@ -17,19 +18,22 @@ import os
 import sys
 from pathlib import Path
 
-# Thêm đường dẫn để import từ app
+# Thêm đường dẫn để import các module từ app
 sys.path.append(str(Path(__file__).parent))
 
+# Import các hàm xử lý RAG và cấu hình
 from app.core.rag import _search_and_rerank_documents, build_final_prompt_with_citation
 from app.config import settings
-from unstructured.partition.pdf import partition_pdf # Import để đọc file
+from unstructured.partition.pdf import partition_pdf # Import để đọc file PDF
 
-# Cấu hình API key cho LangChain
+# Cấu hình API key cho LangChain từ biến môi trường
 os.environ["GOOGLE_API_KEY"] = settings.GOOGLE_API_KEY
 
 # --- CÁC HÀM TIỆN ÍCH CHO VIỆC ĐÁNH GIÁ ---
-# (Các hàm helper giữ nguyên như trước)
 def generate_test_questions(text: str, llm: ChatGoogleGenerativeAI, num_questions: int = 1) -> List[str]:
+    """
+    Sinh ra các câu hỏi kiểm thử dựa trên nội dung tài liệu sử dụng LLM.
+    """
     print(f"Đang tạo {num_questions} câu hỏi kiểm thử...")
     prompt = f"Bạn là một người chuyên tạo câu hỏi. Dựa vào nội dung dưới đây, hãy tạo ra {num_questions} câu hỏi kiểm tra chi tiết và đa dạng. Mỗi câu hỏi trên một dòng.\n\nNội dung:\n---\n{text}\n---\n\n{num_questions} câu hỏi:"
     response = llm.invoke(prompt)
@@ -39,6 +43,9 @@ def generate_test_questions(text: str, llm: ChatGoogleGenerativeAI, num_question
     return questions
 
 async def gather_rag_outputs(questions: List[str], document_id: int, llm: ChatGoogleGenerativeAI) -> List[Dict]:
+    """
+    Chạy pipeline RAG cho từng câu hỏi và thu thập kết quả trả về.
+    """
     results = []
     print("Đang thu thập kết quả từ pipeline RAG...")
     for q in questions:
@@ -56,7 +63,6 @@ async def gather_rag_outputs(questions: List[str], document_id: int, llm: ChatGo
     return results
 
 # --- HÀM MAIN ĐỂ CHẠY ĐÁNH GIÁ ---
-
 async def main(filepath: str, document_id: int):
     """
     Hàm chính để thực hiện toàn bộ quy trình đánh giá cho một file cụ thể.
@@ -124,4 +130,5 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    # Chạy hàm main bằng asyncio với các tham số từ dòng lệnh
     asyncio.run(main(filepath=args.file, document_id=args.id))

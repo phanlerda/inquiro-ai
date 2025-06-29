@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
 
 # Các import cần thiết cho logic chính
 from .core.llm import get_llm
@@ -42,6 +43,23 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# --- CẤU HÌNH CORS MIDDLEWARE ---
+# Định nghĩa các domain được phép truy cập
+origins = [
+    "http://localhost:3000",  # Cho phép frontend Next.js
+    "http://localhost:8080",  # Cho phép Adminer (nếu bạn có request từ script của nó)
+    # Bạn có thể thêm các domain khác nếu cần
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Danh sách các domain được phép
+    allow_credentials=True, # Cho phép gửi cookie (nếu có)
+    allow_methods=["*"],    # Cho phép tất cả các phương thức (GET, POST, PUT, DELETE, OPTIONS, ...)
+    allow_headers=["*"],    # Cho phép tất cả các header
+)
+# ----------------------------------
 
 # Khai báo api_router
 api_router = APIRouter() 

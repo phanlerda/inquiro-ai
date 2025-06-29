@@ -31,7 +31,6 @@ passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 python-jose = "^3.5.0"
 pydantic = {extras = ["email"], version = "^2.11.7"}
 
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
