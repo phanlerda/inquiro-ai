@@ -9,17 +9,20 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: { // Ví dụ thêm màu
-        'brand-primary': '#0070f3',
-        'brand-secondary': '#14B8A6',
+      colors: {
+        'brand-primary': '#3B82F6', // Màu xanh dương chính
+        'brand-secondary': '#10B981', // Màu xanh lá cây cho các element khác
+        'brand-light-blue': '#EFF6FF', // Màu nền nhạt cho các item được chọn
+        'brand-background': '#F9FAFB', // Màu nền chung của khu vực chat
       },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic':
-          'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+      animation: {
+        'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/forms'), // Plugin để style form đẹp hơn
+    require('@tailwindcss/typography'), // Plugin cho class 'prose' để style markdown
+  ],
 }
 export default config

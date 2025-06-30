@@ -1,12 +1,12 @@
-// frontend/src/app/login/page.tsx
-'use client'; // Đánh dấu là Client Component
+'use client';
 
 import { useForm, SubmitHandler } from 'react-hook-form';
 import axios from 'axios';
-import { useRouter } from 'next/navigation'; // Dùng next/navigation cho App Router
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { useState } from 'react';
 import Link from 'next/link';
+import { FiMail, FiLock, FiLogIn } from 'react-icons/fi';
+import toast from 'react-hot-toast';
 
 type Inputs = {
   username: string; // API của chúng ta dùng username cho email
@@ -14,74 +14,81 @@ type Inputs = {
 };
 
 export default function LoginPage() {
-  const { register, handleSubmit, formState: { errors } } = useForm<Inputs>();
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<Inputs>();
   const router = useRouter();
   const { setToken } = useAuthStore();
-  const [apiError, setApiError] = useState<string | null>(null);
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
-    setApiError(null);
     try {
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-        new URLSearchParams(data), // Gửi dưới dạng x-www-form-urlencoded
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
+        new URLSearchParams(data),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
+      toast.success('Đăng nhập thành công!');
       setToken(response.data.access_token);
-      // Tạm thời không lấy user info từ đây, sẽ làm sau khi có endpoint /me
-      router.push('/'); // Chuyển hướng về trang chủ (hoặc trang chat)
+      router.push('/'); // Chuyển hướng về trang chat chính
     } catch (error: any) {
-      if (error.response && error.response.data && error.response.data.detail) {
-        setApiError(error.response.data.detail);
-      } else {
-        setApiError('Đã có lỗi xảy ra khi đăng nhập.');
-      }
+      const detail = error.response?.data?.detail || 'Email hoặc mật khẩu không chính xác.';
+      toast.error(detail);
       console.error('Login error:', error);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Đăng nhập</h1>
-        {apiError && <p className="text-red-500 text-sm mb-4">{apiError}</p>}
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Email (Username)</label>
+    <main className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100">
+      <div className="w-full max-w-md p-10 space-y-8 bg-white/90 rounded-3xl shadow-2xl border border-blue-100">
+        <div className="text-center">
+          <div className="inline-block p-4 bg-gradient-to-tr from-blue-200 to-blue-400 rounded-full mb-5 shadow">
+            <FiLogIn className="w-10 h-10 text-blue-700" />
+          </div>
+          <h1 className="text-4xl font-extrabold text-blue-900 tracking-tight">Đăng nhập</h1>
+          <p className="mt-2 text-base text-gray-500">Chào mừng bạn trở lại!</p>
+        </div>
+        
+        <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
+          <div className="relative">
+            <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400" />
             <input
               type="email"
+              placeholder="Email của bạn"
+              autoComplete="email"
               {...register('username', { required: 'Email không được để trống' })}
-              className={`mt-1 block w-full px-3 py-2 border ${errors.username ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm`}
+              className={`w-full pl-12 pr-4 py-3 border ${errors.username ? 'border-red-400' : 'border-blue-200'} rounded-xl bg-blue-50 focus:bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all text-gray-800 placeholder:text-gray-400`}
             />
-            {errors.username && <p className="text-red-500 text-xs mt-1">{errors.username.message}</p>}
+            {errors.username && <p className="text-red-500 text-xs mt-2 ml-1">{errors.username.message}</p>}
           </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
+
+          <div className="relative">
+            <FiLock className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400" />
             <input
               type="password"
+              placeholder="Mật khẩu"
+              autoComplete="current-password"
               {...register('password', { required: 'Mật khẩu không được để trống' })}
-              className={`mt-1 block w-full px-3 py-2 border ${errors.password ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-brand-primary focus:border-brand-primary sm:text-sm`}
+              className={`w-full pl-12 pr-4 py-3 border ${errors.password ? 'border-red-400' : 'border-blue-200'} rounded-xl bg-blue-50 focus:bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all text-gray-800 placeholder:text-gray-400`}
             />
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
+            {errors.password && <p className="text-red-500 text-xs mt-2 ml-1">{errors.password.message}</p>}
           </div>
-          <button
-            type="submit"
-            className="w-full bg-brand-primary text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
-          >
-            Đăng nhập
-          </button>
+
+          <div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full flex justify-center py-3 px-4 rounded-xl shadow-md text-base font-semibold text-white bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all duration-200 disabled:opacity-60"
+            >
+              {isSubmitting ? 'Đang xử lý...' : 'Đăng nhập'}
+            </button>
+          </div>
         </form>
-        <p className="mt-4 text-center text-sm">
+
+        <p className="mt-8 text-center text-sm text-gray-500">
           Chưa có tài khoản?{' '}
-          <Link href="/register" className="font-medium text-brand-primary hover:text-blue-600">
+          <Link href="/register" className="font-semibold text-blue-600 hover:underline hover:text-blue-800 transition-colors">
             Đăng ký ngay
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

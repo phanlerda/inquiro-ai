@@ -1,4 +1,3 @@
-// frontend/src/components/chat/Sidebar.tsx
 'use client';
 
 import { useAuthStore } from '@/store/authStore';
@@ -36,7 +35,6 @@ export default function Sidebar({ onSelectDocument, onNewChat, selectedDocumentI
 
   const fetchDocuments = async () => {
     if (!token) return;
-    // Không set isLoading = true ở đây để tránh màn hình loading nhấp nháy mỗi khi tự động làm mới
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/documents/`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -46,22 +44,16 @@ export default function Sidebar({ onSelectDocument, onNewChat, selectedDocumentI
       console.error("Failed to fetch documents:", error);
       toast.error("Không thể tải danh sách tài liệu.");
     } finally {
-      // Chỉ set isLoading = false ở lần tải đầu tiên
       if(isLoading) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     if (token) {
-      fetchDocuments(); // Tải lần đầu
-      
-      // Thiết lập tự động làm mới mỗi 10 giây
+      fetchDocuments();
       const intervalId = setInterval(() => {
-        console.log("Tự động làm mới danh sách tài liệu...");
         fetchDocuments();
       }, 10000);
-
-      // Dọn dẹp interval khi component bị unmount để tránh memory leak
       return () => clearInterval(intervalId);
     }
   }, [token]);
@@ -85,7 +77,7 @@ export default function Sidebar({ onSelectDocument, onNewChat, selectedDocumentI
       });
       toast.success(`Đã xóa thành công!`, { id: toastId });
       setDocToDelete(null);
-      fetchDocuments(); // Làm mới danh sách ngay sau khi xóa
+      fetchDocuments();
       if(selectedDocumentId === docToDelete.id) {
         onNewChat();
       }
@@ -103,32 +95,38 @@ export default function Sidebar({ onSelectDocument, onNewChat, selectedDocumentI
       case 'FAILED':
         return <FiAlertCircle className="mr-2 text-red-500 shrink-0" title="Xử lý thất bại"/>;
       default:
-        return <FiFileText className="mr-2 text-gray-400 shrink-0" />;
+        return <FiFileText className="mr-2 text-blue-400 shrink-0" />;
     }
   }
 
   return (
     <>
-      <div className="w-1/5 min-w-[280px] bg-gray-800 text-white p-4 flex flex-col h-screen">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-center">RAG Chatbot</h1>
+      <div className="w-1/5 min-w-[280px] bg-gradient-to-b from-blue-900 via-blue-800 to-blue-700 text-white p-5 flex flex-col h-screen rounded-r-3xl shadow-2xl border-r border-blue-200">
+        <div className="mb-8">
+          <h1 className="text-3xl font-extrabold text-center tracking-tight drop-shadow">🤖 Inquiro AI</h1>
         </div>
 
-        <button onClick={onNewChat} className="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md mb-2 transition-colors duration-150">
+        <button
+          onClick={onNewChat}
+          className="w-full flex items-center justify-center bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold py-2 px-4 rounded-xl mb-2 shadow transition-all duration-150"
+        >
           <FiPlusSquare className="mr-2" />
           Cuộc trò chuyện mới
         </button>
 
-         <button onClick={() => setUploadModalOpen(true)} className="w-full flex items-center justify-center bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-4 rounded-md mb-4 transition-colors duration-150">
-            <FiUploadCloud className="mr-2" />
-            Upload Tài liệu
-          </button>
+        <button
+          onClick={() => setUploadModalOpen(true)}
+          className="w-full flex items-center justify-center bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-600 hover:to-teal-500 text-white font-semibold py-2 px-4 rounded-xl mb-4 shadow transition-all duration-150"
+        >
+          <FiUploadCloud className="mr-2" />
+          Upload Tài liệu
+        </button>
 
-        <div className="flex-grow overflow-y-auto border-t border-gray-700 pt-4">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase mb-2">Tài liệu của bạn</h2>
+        <div className="flex-grow overflow-y-auto border-t border-blue-700 pt-4 custom-scrollbar">
+          <h2 className="text-xs font-bold text-blue-200 uppercase mb-3 tracking-widest">Tài liệu của bạn</h2>
           {isLoading ? (
-            <div className="flex items-center justify-center h-full">
-                <FiLoader className="animate-spin text-gray-400" size={24}/>
+            <div className="flex items-center justify-center h-full py-8">
+              <FiLoader className="animate-spin text-blue-200" size={28}/>
             </div>
           ) : documents.length > 0 ? (
             documents.map((doc) => {
@@ -141,10 +139,10 @@ export default function Sidebar({ onSelectDocument, onNewChat, selectedDocumentI
                       onSelectDocument(doc);
                     }
                   }}
-                  className={`group p-2 rounded-md text-sm mb-1 flex items-center justify-between transition-colors duration-150 ${
-                    isSelectable ? 'hover:bg-gray-700 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                  className={`group p-3 rounded-xl text-base mb-2 flex items-center justify-between transition-all duration-150 ${
+                    isSelectable ? 'hover:bg-blue-800 cursor-pointer' : 'opacity-60 cursor-not-allowed'
                   } ${
-                    selectedDocumentId === doc.id ? 'bg-gray-700' : ''
+                    selectedDocumentId === doc.id ? 'bg-blue-800 border border-blue-400' : ''
                   }`}
                   title={isSelectable ? doc.filename : `Tài liệu đang ở trạng thái: ${doc.status}`}
                 >
@@ -154,25 +152,28 @@ export default function Sidebar({ onSelectDocument, onNewChat, selectedDocumentI
                   </div>
                   <button 
                     onClick={(e) => handleDeleteClick(doc, e)}
-                    className="p-1 rounded-md text-gray-500 hover:bg-red-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 rounded-md text-blue-200 hover:bg-red-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Xóa tài liệu"
                   >
-                    <FiTrash2 size={14} />
+                    <FiTrash2 size={16} />
                   </button>
                 </div>
               )
             })
           ) : (
-            <div className="text-center text-sm text-gray-400 mt-4 p-4 border border-dashed border-gray-600 rounded-lg">
-                <FiInfo className="mx-auto mb-2" size={24} />
-                <p>Bạn chưa có tài liệu nào.</p>
-                <p>Hãy nhấn "Upload Tài liệu" để bắt đầu.</p>
+            <div className="text-center text-base text-blue-200 mt-6 p-4 border border-dashed border-blue-400 rounded-xl bg-blue-900/30">
+              <FiInfo className="mx-auto mb-2" size={28} />
+              <p>Bạn chưa có tài liệu nào.</p>
+              <p>Hãy nhấn <span className="font-semibold">Upload Tài liệu</span> để bắt đầu.</p>
             </div>
           )}
         </div>
 
-        <div className="mt-auto border-t border-gray-700 pt-4">
-          <button onClick={handleLogout} className="w-full flex items-center text-sm text-red-400 hover:bg-red-700 hover:text-white py-2 px-3 rounded-md transition-colors duration-150">
+        <div className="mt-auto border-t border-blue-700 pt-5">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center text-base text-red-300 hover:bg-red-600 hover:text-white py-2 px-3 rounded-xl transition-all duration-150 font-semibold"
+          >
             <FiLogOut className="mr-2" />
             Đăng xuất
           </button>

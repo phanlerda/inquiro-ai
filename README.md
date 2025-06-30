@@ -1,5 +1,5 @@
 
-# 🤖 RAG Chatbot Fullstack Toàn diện
+# 🤖 Inquiro AI
 
 Đây là một dự án chatbot RAG (Retrieval-Augmented Generation) fullstack, được xây dựng với mục tiêu cung cấp một nền tảng mạnh mẽ, có khả năng mở rộng để trò chuyện với các tài liệu cá nhân và kiến thức từ web.
 

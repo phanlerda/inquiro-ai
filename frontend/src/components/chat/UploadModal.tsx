@@ -1,4 +1,3 @@
-// frontend/src/components/chat/UploadModal.tsx
 'use client';
 
 import { useState } from 'react';
@@ -64,27 +63,40 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-      <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Upload Tài liệu</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><FiX size={24} /></button>
+    <div className="fixed inset-0 z-50 flex justify-center items-center bg-black/60">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-blue-100 animate-fadeIn p-7 relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
+          aria-label="Đóng"
+        >
+          <FiX size={22} />
+        </button>
+        <div className="flex flex-col items-center mb-6">
+          <div className="bg-blue-100 rounded-full p-4 mb-3 shadow">
+            <FiUploadCloud size={32} className="text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-blue-800 mb-1">Upload Tài liệu</h2>
+          <p className="text-gray-500 text-sm">Chỉ hỗ trợ file PDF.</p>
         </div>
-        <div className="mb-4">
-          <label className="w-full flex flex-col items-center px-4 py-6 bg-white text-blue-500 rounded-lg shadow-lg tracking-wide uppercase border border-blue-500 cursor-pointer hover:bg-blue-500 hover:text-white">
-            <FiUploadCloud size={32} />
-            <span className="mt-2 text-base leading-normal">{file ? file.name : 'Chọn một file PDF'}</span>
+        <div className="mb-5">
+          <label className="w-full flex flex-col items-center px-4 py-6 bg-blue-50 text-blue-600 rounded-xl shadow-inner tracking-wide border-2 border-dashed border-blue-300 cursor-pointer hover:bg-blue-100 hover:text-blue-800 transition-all">
+            <span className="mt-2 text-base leading-normal truncate">{file ? file.name : 'Chọn một file PDF'}</span>
             <input type='file' className="hidden" onChange={handleFileChange} accept=".pdf" />
           </label>
         </div>
         <button
           onClick={handleUpload}
           disabled={isUploading || !file}
-          className="w-full bg-brand-primary text-white py-2 px-4 rounded-md hover:bg-blue-600 disabled:opacity-50"
+          className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white py-2 px-4 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-800 transition-all disabled:opacity-50"
         >
           {isUploading ? 'Đang xử lý...' : 'Tải lên'}
         </button>
-        {message && <p className="mt-4 text-sm text-center">{message}</p>}
+        {message && (
+          <p className={`mt-5 text-center text-sm ${message.includes('thành công') ? 'text-green-600' : 'text-red-500'}`}>
+            {message}
+          </p>
+        )}
       </div>
     </div>
   );

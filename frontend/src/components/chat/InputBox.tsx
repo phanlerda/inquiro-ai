@@ -1,4 +1,3 @@
-// frontend/src/components/chat/InputBox.tsx
 'use client';
 
 import { useState } from 'react';
@@ -21,20 +20,24 @@ export default function InputBox({ onSendMessage, isLoading }: InputBoxProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-auto p-4 bg-white border-t">
-      <div className="flex items-center">
+    <form
+      onSubmit={handleSubmit}
+      className="mt-auto p-4 bg-white/80 border-t border-blue-100 shadow-inner"
+    >
+      <div className="flex items-center gap-3">
         <input
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="Nhập câu hỏi của bạn ở đây..."
           disabled={isLoading}
-          className="flex-grow px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+          className="flex-grow px-5 py-3 border border-blue-200 rounded-xl bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all text-gray-800 placeholder:text-gray-400 text-base shadow-sm"
         />
         <button
           type="submit"
           disabled={isLoading || !inputValue.trim()}
-          className="ml-3 bg-brand-primary text-white p-3 rounded-full hover:bg-blue-600 disabled:opacity-50 transition-colors duration-150"
+          className="bg-gradient-to-tr from-blue-500 to-blue-700 text-white p-3 rounded-full shadow hover:from-blue-600 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all duration-150 disabled:opacity-50"
+          aria-label="Gửi"
         >
           <FiSend size={20} />
         </button>

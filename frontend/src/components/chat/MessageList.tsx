@@ -1,7 +1,6 @@
-// frontend/src/components/chat/MessageList.tsx
 'use client';
 
-import { Message } from '@/types/chat'; // Sẽ tạo file types này sau
+import { Message } from '@/types/chat';
 import UserMessage from './UserMessage';
 import BotMessage from './BotMessage';
 import { useRef, useEffect } from 'react';
@@ -20,7 +19,7 @@ export default function MessageList({ messages }: MessageListProps) {
   useEffect(scrollToBottom, [messages]);
 
   return (
-    <div className="flex-grow overflow-y-auto p-4 space-y-4">
+    <div className="flex-grow overflow-y-auto px-2 md:px-6 py-6 space-y-6 custom-scrollbar bg-transparent">
       {messages.map((msg) =>
         msg.sender === 'user' ? (
           <UserMessage key={msg.id} text={msg.text} />
