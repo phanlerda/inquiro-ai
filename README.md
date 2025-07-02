@@ -1,7 +1,19 @@
-
 # 🤖 Inquiro AI
 
 Đây là một dự án chatbot RAG (Retrieval-Augmented Generation) fullstack, được xây dựng với mục tiêu cung cấp một nền tảng mạnh mẽ, có khả năng mở rộng để trò chuyện với các tài liệu cá nhân và kiến thức từ web.
+
+## 📸 Demo giao diện
+
+Dưới đây là một số ảnh minh họa các tính năng chính của hệ thống:
+
+- **Màn hình đăng nhập:**
+  ![Login](./frontend/public/login-demo.png)
+
+- **Giao diện chat với prompt và câu trả lời:**
+  ![Prompt & Answer](./frontend/public/prompt-answer-demo.png)
+
+- **Hiển thị nguồn trích dẫn:**
+  ![Nguồn trích dẫn](./frontend/public/source-demo.png)
 
 ## ✨ Các tính năng nổi bật
 
@@ -154,14 +166,6 @@ Dự án cung cấp một script để đánh giá chất lượng pipeline RAG 
     ```
     Ví dụ: `poetry run python evaluate.py --file storage/my_doc.pdf --id 1`
 
-## 🛣️ Lộ trình Phát triển Tiếp theo
-
-*   [ ] Hoàn thiện chức năng quản lý cuộc trò chuyện (lưu và tải lại).
-*   [ ] Tích hợp Object Storage (AWS S3, Google Cloud Storage) cho file upload.
-*   [ ] Chuyển tác vụ nền sang một hệ thống hàng đợi mạnh mẽ hơn như Celery + Redis.
-*   [ ] Viết bộ test tự động (Unit & Integration Tests).
-*   [ ] Triển khai lên môi trường production.
-*   [ ] Thiết lập hệ thống logging và monitoring.
 
 ## 🤝 Đóng góp
 
@@ -170,4 +174,3 @@ Mọi đóng góp đều được chào đón! Vui lòng tạo một Pull Reques
 ## 📄 Giấy phép
 
 Dự án này được cấp phép theo Giấy phép MIT.
-```
