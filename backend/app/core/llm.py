@@ -13,7 +13,7 @@ def get_llm():
     """
     try:
         model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash-latest",
+            model="gemini-2.5-flash",
             temperature=0.5,
             top_p=1,
             top_k=1,
